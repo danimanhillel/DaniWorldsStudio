@@ -2,122 +2,329 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<title>DaniWorldsStudio - Restored</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DaniWorldsStudio - Video Editor</title>
 <style>
-body{background:#121212;color:#eee;font-family:system-ui;margin:0;height:100vh;display:flex;flex-direction:column}
-header{background:#1e1e1e;padding:10px 20px;display:flex;justify-content:space-between}
-h1{color:#4fc3f7;margin:0}
-.export-btn{background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer}
-.main{flex:1;display:flex}
-.media-panel{width:30%;background:#1a1a1a;padding:15px;overflow:auto}
-#importBtn{width:100%;padding:12px;background:#333;color:#fff;border:2px dashed #555;border-radius:8px;cursor:pointer;margin-bottom:15px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;background:#121212;color:#e0e0e0;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+header{background:#1e1e1e;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333;flex-shrink:0}
+h1{font-size:20px;color:#4fc3f7}
+.export-btn{background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:bold}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.top-area{display:flex;height:45%;min-height:200px;border-bottom:1px solid #333;position:relative}
+.media-panel{width:28%;min-width:180px;background:#1a1a1a;padding:12px;overflow-y:auto;border-left:1px solid #333;resize:horizontal;overflow:auto}
+.import-btn{width:100%;padding:10px;background:#333;color:#fff;border:2px dashed #555;border-radius:8px;cursor:pointer;margin-bottom:12px}
 #mediaList{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
-.media-item{position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;cursor:grab;background:#252525}
-.media-item img{width:100%;height:100%;object-fit:cover}
-.media-type{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);text-align:center;font-size:11px;padding:2px}
-.preview-panel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0a0a}
-#previewCanvas{background:#000;border:1px solid #333;max-width:90%;max-height:70%}
-.controls{margin-top:15px;display:flex;gap:10px;align-items:center}
-button{background:#333;color:#fff;border:none;padding:8px 14px;border-radius:4px;cursor:pointer}
+.media-item{position:relative;background:#252525;border-radius:6px;overflow:hidden;cursor:grab;aspect-ratio:16/9}
+.media-item img{width:100%;height:100%;object-fit:cover;display:block}
+.media-type{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:#fff;font-size:11px;text-align:center;padding:3px 0}
+.preview-panel{flex:1;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px;min-width:300px;resize:horizontal;overflow:auto}
+.aspect-controls{display:flex;gap:6px;margin-bottom:8px}
+.aspect-btn{padding:4px 10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px}
+.aspect-btn.active{background:#2196f3;color:#fff;border-color:#2196f3}
+#previewCanvas{max-width:100%;max-height:65%;background:#000;border:1px solid #333}
+.controls{display:flex;gap:12px;align-items:center;margin-top:10px;width:100%;max-width:600px}
+.controls button{background:#333;color:#fff;border:none;padding:8px 12px;border-radius:4px;cursor:pointer}
+#timeDisplay{font-family:monospace;min-width:80px}
+#scrubber{flex:1;accent-color:#4fc3f7;direction:ltr}
+.timeline-area{flex:1;background:#161616;display:flex;flex-direction:column;min-height:180px;resize:vertical;overflow:auto}
+.toolbar{display:flex;gap:8px;padding:8px 16px;background:#1e1e1e;border-bottom:1px solid #333;align-items:center;flex-shrink:0}
+.tool-btn{padding:6px 12px;background:#333;color:#aaa;border:1px solid #444;border-radius:4px;cursor:pointer}
+.tool-btn.active{background:#2196f3;color:#fff;border-color:#2196f3}
+.timeline{flex:1;overflow:auto;position:relative;padding:8px 10px;direction:ltr}
+.time-ruler{height:28px;background:#222;position:sticky;top:0;z-index:10;border-bottom:1px solid #333;cursor:pointer;direction:ltr}
+.tracks{display:flex;flex-direction:column;gap:3px}
+.track{height:56px;background:#1a1a1a;border:1px solid #333;position:relative;border-radius:4px}
+.track.audio{background:#1a1f1a;border-color:#2a3a2a}
+.clip{position:absolute;height:48px;top:4px;background:#4fc3f7;border-radius:4px;overflow:hidden;cursor:move;background-size:cover;background-position:center}
+.clip.selected{outline:2px solid #ffeb3b;z-index:5}
+.clip-info{background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px;font-size:11px;color:#fff;pointer-events:none}
+.playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;z-index:30;cursor:ew-resize;left:0}
+.playhead::before{content:'';position:absolute;top:-4px;left:-6px;width:14px;height:14px;background:#ff5252;border-radius:50%}
+.status{font-size:12px;color:#888;margin-top:8px}
+.resize-handle{position:absolute;background:#444;z-index:10}
+.resize-handle.v{width:6px;top:0;bottom:0;cursor:col-resize}
+.resize-handle.h{height:6px;left:0;right:0;cursor:row-resize}
 </style>
 </head>
 <body>
 <header>
   <h1>DaniWorldsStudio</h1>
-  <button class="export-btn">Export</button>
+  <button class="export-btn" id="exportBtn">Export</button>
 </header>
 <div class="main">
-  <div class="media-panel">
-    <button id="importBtn">Import מדיה</button>
-    <input type="file" id="fileInput" accept="video/*,image/*,audio/*" multiple style="display:none">
-    <div id="mediaList"></div>
-  </div>
-  <div class="preview-panel">
-    <canvas id="previewCanvas" width="1280" height="720"></canvas>
-    <div class="controls">
-      <button id="playBtn">Play</button>
-      <button id="stopBtn">Stop</button>
-      <span id="timeDisplay">00:00</span>
+  <div class="top-area" id="topArea">
+    <div class="media-panel" id="mediaPanel">
+      <button class="import-btn" id="importBtn">Import מדיה / אודיו</button>
+      <input type="file" id="fileInput" accept="video/*,image/*,audio/*" multiple style="display:none">
+      <div id="mediaList"></div>
     </div>
-    <div id="status" style="margin-top:10px;color:#888">מוכן</div>
+    <div class="resize-handle v" id="handleMedia"></div>
+    <div class="preview-panel" id="previewPanel">
+      <div class="aspect-controls">
+        <button class="aspect-btn active" data-aspect="16:9">16:9</button>
+        <button class="aspect-btn" data-aspect="9:16">9:16</button>
+        <button class="aspect-btn" data-aspect="1:1">1:1</button>
+        <button class="aspect-btn" data-aspect="4:3">4:3</button>
+      </div>
+      <canvas id="previewCanvas" width="1280" height="720"></canvas>
+      <div class="controls">
+        <button id="playBtn">Play</button>
+        <button id="stopBtn">Stop</button>
+        <span id="timeDisplay">00:00.00</span>
+        <input type="range" id="scrubber" min="0" max="100" value="0" step="0.01">
+      </div>
+      <div class="status" id="status">מוכן</div>
+    </div>
+  </div>
+  <div class="resize-handle h" id="handleTimeline"></div>
+  <div class="timeline-area" id="timelineArea">
+    <div class="toolbar">
+      <button class="tool-btn active" data-tool="select">בחירה</button>
+      <button class="tool-btn" data-tool="trim">קיצור</button>
+      <button class="tool-btn" data-tool="split">חיתוך</button>
+      <button class="tool-btn" data-tool="volume">ווליום</button>
+    </div>
+    <div class="timeline" id="timeline">
+      <div class="time-ruler" id="timeRuler"></div>
+      <div class="tracks">
+        <div class="track" data-track="v0" data-type="video"></div>
+        <div class="track" data-track="v1" data-type="video"></div>
+        <div class="track" data-track="v2" data-type="video"></div>
+        <div class="track audio" data-track="a0" data-type="audio"></div>
+        <div class="track audio" data-track="a1" data-type="audio"></div>
+        <div class="track audio" data-track="a2" data-type="audio"></div>
+      </div>
+      <div class="playhead" id="playhead"></div>
+    </div>
   </div>
 </div>
 <script>
-let media = [];
-const canvas = document.getElementById('previewCanvas');
-const ctx = canvas.getContext('2d');
-let currentTime = 0, isPlaying = false;
+let media=[], videoTracks=[[],[],[]], audioTracks=[[],[],[]], currentTime=0, duration=30, isPlaying=false;
+let pixelsPerSecond=60, selectedClips=[], canvas=document.getElementById('previewCanvas'), ctx=canvas.getContext('2d');
+let currentAspect='16:9', activeTool='select';
 
-document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
-document.getElementById('fileInput').onchange = async e => {
-  for (const file of e.target.files) {
-    const url = URL.createObjectURL(file);
-    const type = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
-    let thumb = null, duration = 5, element = null;
-    if (type === 'video') {
-      const v = document.createElement('video');
-      v.src = url;
-      await new Promise(r => v.onloadedmetadata = r);
-      duration = v.duration || 5;
-      element = v;
-      v.currentTime = 1;
-      await new Promise(r => { v.onseeked = r; setTimeout(r, 300); });
-      const tc = document.createElement('canvas');
-      tc.width = 160; tc.height = 90;
-      tc.getContext('2d').drawImage(v, 0, 0, 160, 90);
-      thumb = tc.toDataURL();
-    } else if (type === 'audio') {
-      const a = document.createElement('audio');
-      a.src = url;
-      await new Promise(r => a.onloadedmetadata = r);
-      duration = a.duration || 5;
-      element = a;
-      thumb = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect fill="%23222" width="160" height="90"/><text x="80" y="50" fill="%23aaa" font-size="14" text-anchor="middle">AUDIO</text></svg>';
+function setAspect(a){
+  currentAspect=a;
+  document.querySelectorAll('.aspect-btn').forEach(b=>b.classList.toggle('active',b.dataset.aspect===a));
+  const sizes={'16:9':[1280,720],'9:16':[720,1280],'1:1':[1080,1080],'4:3':[1024,768]};
+  const [w,h]=sizes[a]||[1280,720];
+  canvas.width=w; canvas.height=h;
+  renderFrame();
+}
+document.querySelectorAll('.aspect-btn').forEach(b=>b.onclick=()=>setAspect(b.dataset.aspect));
+
+document.querySelectorAll('.tool-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tool-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTool=btn.dataset.tool;
+    renderTimeline();
+  };
+});
+
+function makeResizable(handle, isVertical, target){
+  let startPos, startSize;
+  handle.onmousedown=e=>{
+    e.preventDefault();
+    startPos=isVertical?e.clientX:e.clientY;
+    startSize=isVertical?target.offsetWidth:target.offsetHeight;
+    const onMove=ev=>{
+      const delta=isVertical?(ev.clientX-startPos):(startPos-ev.clientY);
+      const newSize=Math.max(150, startSize+delta);
+      if(isVertical) target.style.width=newSize+'px';
+      else target.style.height=newSize+'px';
+    };
+    const onUp=()=>{
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  };
+}
+makeResizable(document.getElementById('handleMedia'), true, document.getElementById('mediaPanel'));
+makeResizable(document.getElementById('handleTimeline'), false, document.getElementById('timelineArea'));
+
+document.getElementById('importBtn').onclick=()=>document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange=async e=>{
+  for(let file of e.target.files){
+    const url=URL.createObjectURL(file);
+    const id=Date.now()+Math.random();
+    let type=file.type.startsWith('video')?'video':file.type.startsWith('audio')?'audio':'image';
+    let item={id,name:file.name,type,url,duration:5,thumb:null,element:null,originalDuration:5};
+    if(type==='video'){
+      const v=document.createElement('video');
+      v.src=url; v.preload='auto'; v.playsInline=true;
+      await new Promise(r=>v.onloadedmetadata=r);
+      item.duration=v.duration||5; item.originalDuration=item.duration; item.element=v;
+      v.currentTime=Math.min(1,item.duration*0.3);
+      await new Promise(r=>{v.onseeked=r;setTimeout(r,300)});
+      const tc=document.createElement('canvas'); tc.width=160; tc.height=90;
+      tc.getContext('2d').drawImage(v,0,0,160,90);
+      item.thumb=tc.toDataURL();
+    } else if(type==='audio'){
+      const a=document.createElement('audio'); a.src=url;
+      await new Promise(r=>a.onloadedmetadata=r);
+      item.duration=a.duration||5; item.originalDuration=item.duration; item.element=a;
+      item.thumb='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect fill="%23222" width="160" height="90"/><text x="80" y="50" fill="%23aaa" font-size="12" text-anchor="middle">AUDIO</text></svg>';
     } else {
-      const img = new Image();
-      img.src = url;
-      await new Promise(r => img.onload = r);
-      element = img;
-      thumb = url;
+      const img=new Image(); img.src=url;
+      await new Promise(r=>img.onload=r);
+      item.element=img; item.thumb=url; item.duration=5; item.originalDuration=5;
     }
-    media.push({ name: file.name, type, thumb, duration, element, url });
+    media.push(item);
   }
-  renderMedia();
-  e.target.value = '';
+  renderMediaList();
+  e.target.value='';
 };
 
-function renderMedia() {
-  const list = document.getElementById('mediaList');
-  list.innerHTML = '';
-  media.forEach(m => {
-    const el = document.createElement('div');
-    el.className = 'media-item';
-    el.draggable = true;
-    const label = m.type === 'video' ? 'ווידאו' : m.type === 'audio' ? 'אודיו' : 'תמונה';
-    el.innerHTML = `<img src="${m.thumb}"><div class="media-type">${label}</div>`;
-    el.ondragstart = e => e.dataTransfer.setData('text', m.name);
+function renderMediaList(){
+  const list=document.getElementById('mediaList');
+  list.innerHTML='';
+  media.forEach(m=>{
+    const el=document.createElement('div');
+    el.className='media-item';
+    el.draggable=true;
+    const typeLabel=m.type==='video'?'ווידאו':m.type==='audio'?'אודיו':'תמונה';
+    el.innerHTML=`<img src="${m.thumb||''}"><div class="media-type">${typeLabel}</div>`;
+    el.ondragstart=ev=>ev.dataTransfer.setData('mediaId',m.id);
     list.appendChild(el);
   });
 }
 
-document.getElementById('playBtn').onclick = () => {
-  isPlaying = true;
-  function loop() {
-    if (!isPlaying) return;
-    currentTime += 0.016;
-    document.getElementById('timeDisplay').textContent = currentTime.toFixed(2);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (media[0] && media[0].element) {
-      if (media[0].type === 'video') ctx.drawImage(media[0].element, 0, 0, canvas.width, canvas.height);
-      else if (media[0].type === 'image') ctx.drawImage(media[0].element, 0, 0, canvas.width, canvas.height);
-    }
+document.querySelectorAll('.track').forEach(track=>{
+  track.ondragover=e=>e.preventDefault();
+  track.ondrop=e=>{
+    e.preventDefault();
+    const mediaId=e.dataTransfer.getData('mediaId');
+    const m=media.find(x=>x.id==mediaId);
+    if(!m) return;
+    const trackKey=track.dataset.track;
+    const start=Math.max(0,(e.clientX-track.getBoundingClientRect().left)/pixelsPerSecond);
+    const clip={id:Date.now()+Math.random(),mediaId:m.id,startTime:start,duration:m.duration,trimStart:0,trackKey,speed:1,volumePoints:[{t:0,v:1},{t:1,v:1}]};
+    if(trackKey.startsWith('v')) videoTracks[parseInt(trackKey[1])].push(clip);
+    else audioTracks[parseInt(trackKey[1])].push(clip);
+    updateDuration();
+    renderTimeline();
+  };
+});
+
+function updateDuration(){
+  let max=10;
+  [...videoTracks,...audioTracks].forEach(t=>t.forEach(c=>max=Math.max(max,c.startTime+c.duration/(c.speed||1))));
+  duration=max;
+  document.getElementById('scrubber').max=duration;
+}
+
+function renderTimeline(){
+  document.querySelectorAll('.track').forEach(track=>{
+    const key=track.dataset.track;
+    const arr=key.startsWith('v')?videoTracks[parseInt(key[1])]:audioTracks[parseInt(key[1])];
+    track.innerHTML='';
+    arr.forEach(clip=>{
+      const m=media.find(x=>x.id==clip.mediaId);
+      const el=document.createElement('div');
+      const isSelected=selectedClips.some(c=>c.id===clip.id);
+      el.className='clip'+(isSelected?' selected':'');
+      el.style.left=(clip.startTime*pixelsPerSecond)+'px';
+      el.style.width=Math.max(30,(clip.duration/(clip.speed||1))*pixelsPerSecond)+'px';
+      if(m&&m.thumb) el.style.backgroundImage=`url(${m.thumb})`;
+      el.innerHTML=`<div class="clip-info">${m?m.name.substring(0,12):'clip'}</div>`;
+      el.onclick=e=>{e.stopPropagation(); selectedClips=[clip]; renderTimeline();};
+      if(activeTool==='select'){
+        el.onmousedown=e=>{if(e.button===0){e.stopPropagation(); startDrag(e,clip);}};
+      }
+      track.appendChild(el);
+    });
+  });
+  updatePlayhead();
+}
+
+function startDrag(e,clip){
+  if(activeTool!=='select') return;
+  e.preventDefault();
+  if(!selectedClips.some(c=>c.id===clip.id)) selectedClips=[clip];
+  const startX=e.clientX;
+  const origins=selectedClips.map(c=>({id:c.id,start:c.startTime}));
+  const onMove=ev=>{
+    const dx=(ev.clientX-startX)/pixelsPerSecond;
+    selectedClips.forEach(c=>{
+      const orig=origins.find(o=>o.id===c.id);
+      if(orig) c.startTime=Math.max(0,orig.start+dx);
+    });
+    renderTimeline();
+  };
+  const onUp=()=>{document.removeEventListener('mousemove',onMove);document.removeEventListener('mouseup',onUp);updateDuration();};
+  document.addEventListener('mousemove',onMove);
+  document.addEventListener('mouseup',onUp);
+}
+
+function updatePlayhead(){
+  const x=currentTime*pixelsPerSecond;
+  document.getElementById('playhead').style.left=x+'px';
+  document.getElementById('timeDisplay').textContent=currentTime.toFixed(2);
+  document.getElementById('scrubber').value=currentTime;
+}
+
+document.getElementById('scrubber').oninput=e=>{
+  currentTime=parseFloat(e.target.value);
+  updatePlayhead();
+  renderFrame();
+};
+
+document.getElementById('timeRuler').onclick=e=>{
+  const r=document.getElementById('timeline').getBoundingClientRect();
+  currentTime=Math.max(0,(e.clientX-r.left)/pixelsPerSecond);
+  updatePlayhead();
+  renderFrame();
+};
+
+document.getElementById('playBtn').onclick=()=>{
+  if(isPlaying) return;
+  isPlaying=true;
+  let last=performance.now();
+  function loop(ts){
+    if(!isPlaying) return;
+    const delta=(ts-last)/1000;
+    last=ts;
+    currentTime+=delta;
+    if(currentTime>duration){currentTime=duration;isPlaying=false;}
+    updatePlayhead();
+    renderFrame();
     requestAnimationFrame(loop);
   }
-  loop();
+  requestAnimationFrame(loop);
 };
-document.getElementById('stopBtn').onclick = () => { isPlaying = false; currentTime = 0; };
-renderMedia();
+
+document.getElementById('stopBtn').onclick=()=>{
+  isPlaying=false;
+  currentTime=0;
+  updatePlayhead();
+  renderFrame();
+};
+
+function renderFrame(){
+  ctx.fillStyle='#000';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  for(let t=0;t<3;t++){
+    for(let clip of videoTracks[t]){
+      const end=clip.startTime+clip.duration/(clip.speed||1);
+      if(currentTime>=clip.startTime && currentTime<end){
+        const m=media.find(x=>x.id==clip.mediaId);
+        if(m&&m.element){
+          if(m.type==='video') ctx.drawImage(m.element,0,0,canvas.width,canvas.height);
+          else if(m.type==='image') ctx.drawImage(m.element,0,0,canvas.width,canvas.height);
+        }
+      }
+    }
+  }
+}
+
+setAspect('16:9');
+updateDuration();
+renderTimeline();
+renderFrame();
 </script>
 </body>
 </html>
