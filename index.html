@@ -1,1 +1,123 @@
-See /tmp/final_index.html for full content - using file-based approach
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>DaniWorldsStudio - Restored</title>
+<style>
+body{background:#121212;color:#eee;font-family:system-ui;margin:0;height:100vh;display:flex;flex-direction:column}
+header{background:#1e1e1e;padding:10px 20px;display:flex;justify-content:space-between}
+h1{color:#4fc3f7;margin:0}
+.export-btn{background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer}
+.main{flex:1;display:flex}
+.media-panel{width:30%;background:#1a1a1a;padding:15px;overflow:auto}
+#importBtn{width:100%;padding:12px;background:#333;color:#fff;border:2px dashed #555;border-radius:8px;cursor:pointer;margin-bottom:15px}
+#mediaList{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
+.media-item{position:relative;aspect-ratio:16/9;border-radius:6px;overflow:hidden;cursor:grab;background:#252525}
+.media-item img{width:100%;height:100%;object-fit:cover}
+.media-type{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);text-align:center;font-size:11px;padding:2px}
+.preview-panel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0a0a0a}
+#previewCanvas{background:#000;border:1px solid #333;max-width:90%;max-height:70%}
+.controls{margin-top:15px;display:flex;gap:10px;align-items:center}
+button{background:#333;color:#fff;border:none;padding:8px 14px;border-radius:4px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>DaniWorldsStudio</h1>
+  <button class="export-btn">Export</button>
+</header>
+<div class="main">
+  <div class="media-panel">
+    <button id="importBtn">Import מדיה</button>
+    <input type="file" id="fileInput" accept="video/*,image/*,audio/*" multiple style="display:none">
+    <div id="mediaList"></div>
+  </div>
+  <div class="preview-panel">
+    <canvas id="previewCanvas" width="1280" height="720"></canvas>
+    <div class="controls">
+      <button id="playBtn">Play</button>
+      <button id="stopBtn">Stop</button>
+      <span id="timeDisplay">00:00</span>
+    </div>
+    <div id="status" style="margin-top:10px;color:#888">מוכן</div>
+  </div>
+</div>
+<script>
+let media = [];
+const canvas = document.getElementById('previewCanvas');
+const ctx = canvas.getContext('2d');
+let currentTime = 0, isPlaying = false;
+
+document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('fileInput').onchange = async e => {
+  for (const file of e.target.files) {
+    const url = URL.createObjectURL(file);
+    const type = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
+    let thumb = null, duration = 5, element = null;
+    if (type === 'video') {
+      const v = document.createElement('video');
+      v.src = url;
+      await new Promise(r => v.onloadedmetadata = r);
+      duration = v.duration || 5;
+      element = v;
+      v.currentTime = 1;
+      await new Promise(r => { v.onseeked = r; setTimeout(r, 300); });
+      const tc = document.createElement('canvas');
+      tc.width = 160; tc.height = 90;
+      tc.getContext('2d').drawImage(v, 0, 0, 160, 90);
+      thumb = tc.toDataURL();
+    } else if (type === 'audio') {
+      const a = document.createElement('audio');
+      a.src = url;
+      await new Promise(r => a.onloadedmetadata = r);
+      duration = a.duration || 5;
+      element = a;
+      thumb = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect fill="%23222" width="160" height="90"/><text x="80" y="50" fill="%23aaa" font-size="14" text-anchor="middle">AUDIO</text></svg>';
+    } else {
+      const img = new Image();
+      img.src = url;
+      await new Promise(r => img.onload = r);
+      element = img;
+      thumb = url;
+    }
+    media.push({ name: file.name, type, thumb, duration, element, url });
+  }
+  renderMedia();
+  e.target.value = '';
+};
+
+function renderMedia() {
+  const list = document.getElementById('mediaList');
+  list.innerHTML = '';
+  media.forEach(m => {
+    const el = document.createElement('div');
+    el.className = 'media-item';
+    el.draggable = true;
+    const label = m.type === 'video' ? 'ווידאו' : m.type === 'audio' ? 'אודיו' : 'תמונה';
+    el.innerHTML = `<img src="${m.thumb}"><div class="media-type">${label}</div>`;
+    el.ondragstart = e => e.dataTransfer.setData('text', m.name);
+    list.appendChild(el);
+  });
+}
+
+document.getElementById('playBtn').onclick = () => {
+  isPlaying = true;
+  function loop() {
+    if (!isPlaying) return;
+    currentTime += 0.016;
+    document.getElementById('timeDisplay').textContent = currentTime.toFixed(2);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (media[0] && media[0].element) {
+      if (media[0].type === 'video') ctx.drawImage(media[0].element, 0, 0, canvas.width, canvas.height);
+      else if (media[0].type === 'image') ctx.drawImage(media[0].element, 0, 0, canvas.width, canvas.height);
+    }
+    requestAnimationFrame(loop);
+  }
+  loop();
+};
+document.getElementById('stopBtn').onclick = () => { isPlaying = false; currentTime = 0; };
+renderMedia();
+</script>
+</body>
+</html>
