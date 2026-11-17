@@ -1,1 +1,240 @@
-PLACEHOLDER_WILL_BE_REPLACED
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>DaniWorldsStudio</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:system-ui,sans-serif;background:#121212;color:#e0e0e0;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+    header{background:#1e1e1e;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #333}
+    h1{font-size:20px;color:#4fc3f7}
+    .export-btn{background:#2196f3;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-weight:bold}
+    .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    .top{display:flex;height:42%;border-bottom:1px solid #333}
+    .media-panel{width:28%;background:#1a1a1a;padding:12px;overflow-y:auto;border-left:1px solid #333}
+    .import-btn{width:100%;padding:10px;background:#333;color:#fff;border:2px dashed #555;border-radius:8px;cursor:pointer;margin-bottom:12px}
+    #mediaList{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
+    .media-item{position:relative;background:#252525;border-radius:6px;overflow:hidden;cursor:grab;aspect-ratio:16/9}
+    .media-item img{width:100%;height:100%;object-fit:cover;display:block}
+    .media-type{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.7);color:#fff;font-size:11px;text-align:center;padding:2px 0}
+    .preview-panel{flex:1;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px}
+    .aspect-controls{display:flex;gap:6px;margin-bottom:8px}
+    .aspect-btn{padding:4px 10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer;font-size:12px}
+    .aspect-btn.active{background:#2196f3;color:#fff;border-color:#2196f3}
+    #previewCanvas{max-width:100%;max-height:62%;background:#000;border:1px solid #333}
+    .controls{display:flex;gap:12px;align-items:center;margin-top:10px;width:100%;max-width:600px}
+    .controls button{background:#333;color:#fff;border:none;padding:8px 12px;border-radius:4px;cursor:pointer}
+    #timeDisplay{font-family:monospace;min-width:80px}
+    #scrubber{flex:1;accent-color:#4fc3f7}
+    .timeline-area{flex:1;background:#161616;display:flex;flex-direction:column}
+    .toolbar{display:flex;gap:8px;padding:8px 16px;background:#1e1e1e;border-bottom:1px solid #333;align-items:center}
+    .tool-btn{padding:6px 12px;background:#333;color:#aaa;border:1px solid #444;border-radius:4px;cursor:pointer}
+    .tool-btn.active{background:#2196f3;color:#fff;border-color:#2196f3}
+    .timeline{flex:1;overflow:auto;position:relative;padding:8px 10px}
+    .time-ruler{height:28px;background:#222;position:sticky;top:0;z-index:10;border-bottom:1px solid #333;cursor:pointer}
+    .tracks{display:flex;flex-direction:column;gap:3px}
+    .track{height:56px;background:#1a1a1a;border:1px solid #333;position:relative;border-radius:4px}
+    .track.audio{background:#1a1f1a;border-color:#2a3a2a}
+    .clip{position:absolute;height:48px;top:4px;background:#4fc3f7;border-radius:4px;overflow:hidden;cursor:move;background-size:cover;background-position:center}
+    .clip.selected{outline:2px solid #ffeb3b;z-index:5}
+    .clip-info{background:rgba(0,0,0,.55);padding:2px 6px;border-radius:3px;font-size:11px;color:#fff;pointer-events:none}
+    .playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;z-index:30;cursor:ew-resize}
+    .status{font-size:12px;color:#888;margin-top:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DaniWorldsStudio</h1>
+    <button class="export-btn" id="exportBtn">Export</button>
+  </header>
+  <div class="main">
+    <div class="top">
+      <div class="media-panel">
+        <button class="import-btn" id="importBtn">Import</button>
+        <input type="file" id="fileInput" accept="video/*,image/*,audio/*" multiple style="display:none">
+        <div id="mediaList"></div>
+      </div>
+      <div class="preview-panel">
+        <div class="aspect-controls">
+          <button class="aspect-btn active" data-aspect="16:9">16:9</button>
+          <button class="aspect-btn" data-aspect="9:16">9:16</button>
+          <button class="aspect-btn" data-aspect="1:1">1:1</button>
+          <button class="aspect-btn" data-aspect="4:3">4:3</button>
+        </div>
+        <canvas id="previewCanvas" width="1280" height="720"></canvas>
+        <div class="controls">
+          <button id="playBtn">Play</button>
+          <button id="stopBtn">Stop</button>
+          <span id="timeDisplay">00:00.00</span>
+          <input type="range" id="scrubber" min="0" max="100" value="0">
+        </div>
+        <div class="status" id="status">מוכן</div>
+      </div>
+    </div>
+    <div class="timeline-area">
+      <div class="toolbar">
+        <button class="tool-btn active" data-tool="select">Select</button>
+        <button class="tool-btn" data-tool="trim">Trim</button>
+        <button class="tool-btn" data-tool="split">Split</button>
+        <button class="tool-btn" data-tool="volume">Volume</button>
+      </div>
+      <div class="timeline" id="timeline">
+        <div class="time-ruler" id="timeRuler"></div>
+        <div class="tracks">
+          <div class="track" data-track="v0"></div>
+          <div class="track" data-track="v1"></div>
+          <div class="track" data-track="v2"></div>
+          <div class="track audio" data-track="a0"></div>
+          <div class="track audio" data-track="a1"></div>
+          <div class="track audio" data-track="a2"></div>
+        </div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+  </div>
+  <script>
+    let media=[], videoTracks=[[],[],[]], audioTracks=[[],[],[]], currentTime=0, duration=30, isPlaying=false;
+    let pixelsPerSecond=60, selectedClips=[], canvas=document.getElementById('previewCanvas'), ctx=canvas.getContext('2d');
+    let currentAspect='16:9';
+
+    function setAspect(a){
+      currentAspect=a;
+      document.querySelectorAll('.aspect-btn').forEach(b=>b.classList.toggle('active',b.dataset.aspect===a));
+      const sizes={'16:9':[1280,720],'9:16':[720,1280],'1:1':[1080,1080],'4:3':[1024,768]};
+      const [w,h]=sizes[a]||[1280,720];
+      canvas.width=w; canvas.height=h;
+      renderFrame();
+    }
+    document.querySelectorAll('.aspect-btn').forEach(b=>b.onclick=()=>setAspect(b.dataset.aspect));
+
+    document.getElementById('importBtn').onclick=()=>document.getElementById('fileInput').click();
+    document.getElementById('fileInput').onchange=async e=>{
+      for(let file of e.target.files){
+        const url=URL.createObjectURL(file);
+        const id=Date.now()+Math.random();
+        let type=file.type.startsWith('video')?'video':file.type.startsWith('audio')?'audio':'image';
+        let item={id,name:file.name,type,url,duration:5,thumb:null,element:null};
+        if(type==='video'){
+          const v=document.createElement('video');
+          v.src=url; v.preload='metadata';
+          await new Promise(r=>v.onloadedmetadata=r);
+          item.duration=v.duration||5;
+          item.element=v;
+          v.currentTime=Math.min(1,item.duration*0.3);
+          await new Promise(r=>{v.onseeked=r;setTimeout(r,300)});
+          const tc=document.createElement('canvas');
+          tc.width=160; tc.height=90;
+          tc.getContext('2d').drawImage(v,0,0,160,90);
+          item.thumb=tc.toDataURL();
+        } else if(type==='audio'){
+          const a=document.createElement('audio');
+          a.src=url;
+          await new Promise(r=>a.onloadedmetadata=r);
+          item.duration=a.duration||5;
+          item.element=a;
+          item.thumb='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="160" height="90"><rect fill="%23222" width="160" height="90"/><text x="80" y="50" fill="%23aaa" font-size="14" text-anchor="middle">AUDIO</text></svg>';
+        } else {
+          const img=new Image();
+          img.src=url;
+          await new Promise(r=>img.onload=r);
+          item.element=img;
+          item.thumb=url;
+        }
+        media.push(item);
+      }
+      renderMediaList();
+      e.target.value='';
+    };
+
+    function renderMediaList(){
+      const list=document.getElementById('mediaList');
+      list.innerHTML='';
+      media.forEach(m=>{
+        const el=document.createElement('div');
+        el.className='media-item';
+        el.draggable=true;
+        const typeLabel = m.type==='video'?'ווידאו':m.type==='audio'?'אודיו':'תמונה';
+        el.innerHTML=`<img src="${m.thumb||''}"> <div class="media-type">${typeLabel}</div>`;
+        el.ondragstart=ev=>ev.dataTransfer.setData('mediaId',m.id);
+        list.appendChild(el);
+      });
+    }
+
+    document.querySelectorAll('.track').forEach(track=>{
+      track.ondragover=e=>e.preventDefault();
+      track.ondrop=e=>{
+        e.preventDefault();
+        const mediaId=e.dataTransfer.getData('mediaId');
+        const m=media.find(x=>x.id==mediaId);
+        if(!m) return;
+        const trackKey=track.dataset.track;
+        const start=Math.max(0,(e.clientX-track.getBoundingClientRect().left)/pixelsPerSecond);
+        const clip={id:Date.now()+Math.random(),mediaId:m.id,startTime:start,duration:m.duration,trimStart:0,trackKey,speed:1};
+        if(trackKey.startsWith('v')) videoTracks[parseInt(trackKey[1])].push(clip);
+        else audioTracks[parseInt(trackKey[1])].push(clip);
+        updateDuration();
+        renderTimeline();
+      };
+    });
+
+    function updateDuration(){
+      let max=10;
+      [...videoTracks,...audioTracks].forEach(t=>t.forEach(c=>max=Math.max(max,c.startTime+c.duration)));
+      duration=max;
+      document.getElementById('scrubber').max=duration;
+    }
+
+    function renderTimeline(){
+      document.querySelectorAll('.track').forEach(track=>{
+        const key=track.dataset.track;
+        const arr=key.startsWith('v')?videoTracks[parseInt(key[1])]:audioTracks[parseInt(key[1])];
+        track.innerHTML='';
+        arr.forEach(clip=>{
+          const m=media.find(x=>x.id==clip.mediaId);
+          const el=document.createElement('div');
+          el.className='clip'+(selectedClips.some(c=>c.id===clip.id)?' selected':'');
+          el.style.left=(clip.startTime*pixelsPerSecond)+'px';
+          el.style.width=Math.max(20,clip.duration*pixelsPerSecond)+'px';
+          if(m&&m.thumb) el.style.backgroundImage=`url(${m.thumb})`;
+          el.innerHTML=`<div class="clip-info">${m?m.name.substring(0,12):'clip'}</div>`;
+          el.onclick=e=>{e.stopPropagation(); selectedClips=[clip]; renderTimeline();};
+          track.appendChild(el);
+        });
+      });
+    }
+
+    function renderFrame(){
+      ctx.fillStyle='#000';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      for(let t=0;t<3;t++){
+        for(let clip of videoTracks[t]){
+          if(currentTime>=clip.startTime && currentTime<clip.startTime+clip.duration){
+            const m=media.find(x=>x.id==clip.mediaId);
+            if(m&&m.type==='video'&&m.element) ctx.drawImage(m.element,0,0,canvas.width,canvas.height);
+            else if(m&&m.type==='image'&&m.element) ctx.drawImage(m.element,0,0,canvas.width,canvas.height);
+          }
+        }
+      }
+    }
+
+    document.getElementById('playBtn').onclick=()=>{
+      isPlaying=true;
+      requestAnimationFrame(function loop(ts){
+        if(!isPlaying) return;
+        currentTime+=0.016;
+        if(currentTime>duration) isPlaying=false;
+        document.getElementById('timeDisplay').textContent=currentTime.toFixed(2);
+        document.getElementById('playhead').style.left=(currentTime*pixelsPerSecond)+'px';
+        renderFrame();
+        requestAnimationFrame(loop);
+      });
+    };
+    document.getElementById('stopBtn').onclick=()=>{isPlaying=false; currentTime=0; renderFrame();};
+
+    setAspect('16:9');
+    updateDuration();
+    renderTimeline();
+    renderFrame();
+  </script>
+</body>
+</html>
