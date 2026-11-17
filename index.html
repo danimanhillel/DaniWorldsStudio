@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DaniWorldsStudio - Video Editor</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #121212;
+      color: #e0e0e0;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #1e1e1e;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #333;
+    }
+    h1 { font-size: 20px; color: #4fc3f7; }
+    .export-btn {
+      background: #2196f3;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    .export-btn:hover { background: #1976d2; }
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .top {
+      display: flex;
+      height: 45%;
+      border-bottom: 1px solid #333;
+    }
+    .media-panel {
+      width: 35%;
+      background: #1a1a1a;
+      padding: 16px;
+      overflow-y: auto;
+      border-left: 1px solid #333;
+    }
+    .import-btn {
+      width: 100%;
+      padding: 12px;
+      background: #333;
+      color: white;
+      border: 2px dashed #555;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-bottom: 16px;
+    }
+    .import-btn:hover { background: #444; }
+    .media-item {
+      background: #252525;
+      border-radius: 8px;
+      padding: 8px;
+      margin-bottom: 10px;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .media-item:active { cursor: grabbing; }
+    .thumb {
+      width: 80px;
+      height: 45px;
+      background: #000;
+      object-fit: cover;
+      border-radius: 4px;
+    }
+    .media-info { flex: 1; font-size: 13px; }
+    .preview-panel {
+      flex: 1;
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    #previewCanvas {
+      max-width: 100%;
+      max-height: 70%;
+      background: #000;
+      border: 1px solid #333;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin-top: 12px;
+      width: 100%;
+      max-width: 600px;
+    }
+    .controls button {
+      background: #333;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .controls button:hover { background: #444; }
+    #timeDisplay { font-family: monospace; min-width: 80px; }
+    #scrubber {
+      flex: 1;
+      accent-color: #4fc3f7;
+    }
+    .timeline-area {
+      flex: 1;
+      background: #161616;
+      display: flex;
+      flex-direction: column;
+    }
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      padding: 8px 16px;
+      background: #1e1e1e;
+      border-bottom: 1px solid #333;
+    }
+    .tool-btn {
+      padding: 6px 12px;
+      background: #333;
+      color: #aaa;
+      border: 1px solid #444;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tool-btn.active {
+      background: #2196f3;
+      color: white;
+      border-color: #2196f3;
+    }
+    .timeline {
+      flex: 1;
+      overflow: auto;
+      position: relative;
+      padding: 10px;
+    }
+    .time-ruler {
+      height: 30px;
+      background: #222;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid #333;
+    }
+    .tracks {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 200px;
+    }
+    .track {
+      height: 60px;
+      background: #1a1a1a;
+      border: 1px solid #333;
+      position: relative;
+      border-radius: 4px;
+    }
+    .clip {
+      position: absolute;
+      height: 52px;
+      top: 4px;
+      background: #4fc3f7;
+      border-radius: 4px;
+      overflow: hidden;
+      cursor: move;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 12px;
+      color: #000;
+      white-space: nowrap;
+    }
+    .clip.trim { cursor: ew-resize; }
+    .playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #ff5252;
+      z-index: 20;
+      pointer-events: none;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.7);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .modal-content {
+      background: #1e1e1e;
+      padding: 24px;
+      border-radius: 8px;
+      min-width: 300px;
+    }
+    .modal-content select, .modal-content button {
+      margin: 8px 0;
+      width: 100%;
+      padding: 8px;
+    }
+    .status { font-size: 12px; color: #888; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>DaniWorldsStudio</h1>
+    <button class="export-btn" id="exportBtn">Export</button>
+  </header>
+
+  <div class="main">
+    <div class="top">
+      <div class="media-panel">
+        <button class="import-btn" id="importBtn">Import מדיה</button>
+        <input type="file" id="fileInput" accept="video/*,image/*" multiple style="display:none">
+        <div id="mediaList"></div>
+      </div>
+      <div class="preview-panel">
+        <canvas id="previewCanvas" width="1280" height="720"></canvas>
+        <div class="controls">
+          <button id="playBtn">Play</button>
+          <button id="stopBtn">Stop</button>
+          <span id="timeDisplay">00:00.00</span>
+          <input type="range" id="scrubber" min="0" max="100" value="0" step="0.01">
+        </div>
+        <div class="status" id="status">מוכן</div>
+      </div>
+    </div>
+
+    <div class="timeline-area">
+      <div class="toolbar">
+        <button class="tool-btn active" data-tool="select">בחירה (Select)</button>
+        <button class="tool-btn" data-tool="trim">קיצור (Trim)</button>
+        <button class="tool-btn" data-tool="split">חיתוך (Split)</button>
+      </div>
+      <div class="timeline" id="timeline">
+        <div class="time-ruler" id="timeRuler"></div>
+        <div class="tracks" id="tracks">
+          <div class="track" data-track="0"></div>
+          <div class="track" data-track="1"></div>
+          <div class="track" data-track="2"></div>
+        </div>
+        <div class="playhead" id="playhead"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="exportModal">
+    <div class="modal-content">
+      <h3>הגדרות ייצוא</h3>
+      <label>FPS:
+        <select id="fpsSelect">
+          <option value="24">24</option>
+          <option value="30" selected>30</option>
+          <option value="50">50</option>
+          <option value="60">60</option>
+        </select>
+      </label>
+      <label>רזולוציה:
+        <select id="resSelect">
+          <option value="1280x720">720p</option>
+          <option value="1920x1080" selected>1080p</option>
+          <option value="2560x1440">2K</option>
+          <option value="3840x2160">4K</option>
+        </select>
+      </label>
+      <button id="startExport">ייצא סרטון</button>
+      <button id="closeModal">סגור</button>
+      <div id="exportStatus"></div>
+    </div>
+  </div>
+
+  <script>
+    // Core state
+    let media = [];
+    let tracks = [[], [], []]; // 3 tracks, higher index = higher layer (top overrides)
+    let currentTime = 0;
+    let duration = 60; // total timeline duration in seconds
+    let isPlaying = false;
+    let activeTool = 'select';
+    let pixelsPerSecond = 50;
+    let playheadEl = document.getElementById('playhead');
+    let canvas = document.getElementById('previewCanvas');
+    let ctx = canvas.getContext('2d');
+    let animationId = null;
+    let lastTimestamp = 0;
+
+    // Tools
+    document.querySelectorAll('.tool-btn').forEach(btn => {
+      btn.onclick = () => {
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        activeTool = btn.dataset.tool;
+      };
+    });
+
+    // Import
+    document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
+    document.getElementById('fileInput').onchange = async (e) => {
+      for (let file of e.target.files) {
+        const url = URL.createObjectURL(file);
+        const id = Date.now() + Math.random();
+        let item = { id, name: file.name, type: file.type.startsWith('video') ? 'video' : 'image', url, duration: 5 };
+        if (item.type === 'video') {
+          const video = document.createElement('video');
+          video.src = url;
+          video.preload = 'metadata';
+          await new Promise(r => video.onloadedmetadata = r);
+          item.duration = video.duration || 5;
+          item.element = video;
+          // thumbnail
+          video.currentTime = Math.min(1, item.duration / 2);
+          await new Promise(r => video.onseeked = r);
+          const thumbCanvas = document.createElement('canvas');
+          thumbCanvas.width = 160; thumbCanvas.height = 90;
+          thumbCanvas.getContext('2d').drawImage(video, 0, 0, 160, 90);
+          item.thumb = thumbCanvas.toDataURL();
+        } else {
+          const img = new Image();
+          img.src = url;
+          await new Promise(r => img.onload = r);
+          item.element = img;
+          item.thumb = url;
+        }
+        media.push(item);
+        renderMediaList();
+      }
+      e.target.value = '';
+    };
+
+    function renderMediaList() {
+      const list = document.getElementById('mediaList');
+      list.innerHTML = '';
+      media.forEach(m => {
+        const el = document.createElement('div');
+        el.className = 'media-item';
+        el.draggable = true;
+        el.innerHTML = `<img class="thumb" src="${m.thumb}"> <div class="media-info">${m.name}<br>${m.duration.toFixed(1)}s</div>`;
+        el.ondragstart = (ev) => ev.dataTransfer.setData('mediaId', m.id);
+        list.appendChild(el);
+      });
+    }
+
+    // Timeline drop
+    document.querySelectorAll('.track').forEach(track => {
+      track.ondragover = e => e.preventDefault();
+      track.ondrop = e => {
+        e.preventDefault();
+        const mediaId = e.dataTransfer.getData('mediaId');
+        const m = media.find(x => x.id == mediaId);
+        if (!m) return;
+        const rect = track.getBoundingClientRect();
+        const start = Math.max(0, (e.clientX - rect.left) / pixelsPerSecond);
+        const clip = {
+          id: Date.now() + Math.random(),
+          mediaId: m.id,
+          startTime: start,
+          duration: m.duration,
+          trimStart: 0,
+          trimEnd: m.duration
+        };
+        const trackIdx = parseInt(track.dataset.track);
+        tracks[trackIdx].push(clip);
+        updateDuration();
+        renderTimeline();
+      };
+    });
+
+    function updateDuration() {
+      let max = 30;
+      tracks.forEach(t => t.forEach(c => max = Math.max(max, c.startTime + c.duration)));
+      duration = max;
+      document.getElementById('scrubber').max = duration;
+    }
+
+    function renderTimeline() {
+      document.querySelectorAll('.track').forEach(track => {
+        const idx = parseInt(track.dataset.track);
+        track.innerHTML = '';
+        tracks[idx].forEach(clip => {
+          const m = media.find(x => x.id == clip.mediaId);
+          const el = document.createElement('div');
+          el.className = 'clip';
+          el.style.left = (clip.startTime * pixelsPerSecond) + 'px';
+          el.style.width = (clip.duration * pixelsPerSecond) + 'px';
+          el.textContent = m ? m.name : 'clip';
+          el.dataset.clipId = clip.id;
+          el.dataset.track = idx;
+
+          // Tool interactions
+          if (activeTool === 'select') {
+            el.onmousedown = (e) => startDrag(e, clip, idx);
+          } else if (activeTool === 'trim') {
+            el.onmousedown = (e) => startTrim(e, clip, idx);
+          } else if (activeTool === 'split') {
+            el.onclick = (e) => splitClip(e, clip, idx);
+          }
+          track.appendChild(el);
+        });
+      });
+      updatePlayhead();
+    }
+
+    function startDrag(e, clip, trackIdx) {
+      if (activeTool !== 'select') return;
+      e.preventDefault();
+      const startX = e.clientX;
+      const origStart = clip.startTime;
+      const onMove = (ev) => {
+        const dx = (ev.clientX - startX) / pixelsPerSecond;
+        clip.startTime = Math.max(0, origStart + dx);
+        renderTimeline();
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        updateDuration();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
+
+    function startTrim(e, clip, trackIdx) {
+      if (activeTool !== 'trim') return;
+      e.preventDefault();
+      const rect = e.target.getBoundingClientRect();
+      const isLeft = e.clientX - rect.left < rect.width / 2;
+      const startX = e.clientX;
+      const orig = { start: clip.startTime, dur: clip.duration, trimS: clip.trimStart, trimE: clip.trimEnd };
+      const onMove = (ev) => {
+        const dx = (ev.clientX - startX) / pixelsPerSecond;
+        if (isLeft) {
+          const newStart = orig.start + dx;
+          if (newStart >= 0 && newStart < orig.start + orig.dur) {
+            clip.startTime = newStart;
+            clip.duration = orig.dur - dx;
+            clip.trimStart = orig.trimS + dx;
+          }
+        } else {
+          const newDur = Math.max(0.1, orig.dur + dx);
+          clip.duration = newDur;
+          clip.trimEnd = orig.trimS + newDur;
+        }
+        renderTimeline();
+      };
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        updateDuration();
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    }
+
+    function splitClip(e, clip, trackIdx) {
+      if (activeTool !== 'split') return;
+      const rect = e.target.getBoundingClientRect();
+      const clickTime = clip.startTime + (e.clientX - rect.left) / pixelsPerSecond;
+      if (clickTime <= clip.startTime || clickTime >= clip.startTime + clip.duration) return;
+      const offset = clickTime - clip.startTime;
+      const newClip = {
+        ...clip,
+        id: Date.now() + Math.random(),
+        startTime: clickTime,
+        duration: clip.duration - offset,
+        trimStart: clip.trimStart + offset
+      };
+      clip.duration = offset;
+      clip.trimEnd = clip.trimStart + offset;
+      tracks[trackIdx].push(newClip);
+      renderTimeline();
+      updateDuration();
+    }
+
+    // Playback
+    function formatTime(t) {
+      const m = Math.floor(t / 60);
+      const s = (t % 60).toFixed(2);
+      return `${m.toString().padStart(2,'0')}:${s.padStart(5,'0')}`;
+    }
+
+    function updatePlayhead() {
+      const x = currentTime * pixelsPerSecond;
+      playheadEl.style.left = x + 'px';
+      document.getElementById('timeDisplay').textContent = formatTime(currentTime);
+      document.getElementById('scrubber').value = currentTime;
+    }
+
+    document.getElementById('scrubber').oninput = (e) => {
+      currentTime = parseFloat(e.target.value);
+      updatePlayhead();
+      renderFrame();
+    };
+
+    document.getElementById('playBtn').onclick = () => {
+      if (isPlaying) return;
+      isPlaying = true;
+      lastTimestamp = performance.now();
+      playLoop();
+    };
+    document.getElementById('stopBtn').onclick = () => {
+      isPlaying = false;
+      if (animationId) cancelAnimationFrame(animationId);
+      currentTime = 0;
+      updatePlayhead();
+      renderFrame();
+    };
+
+    function playLoop(ts) {
+      if (!isPlaying) return;
+      const delta = (ts - lastTimestamp) / 1000;
+      lastTimestamp = ts;
+      currentTime += delta;
+      if (currentTime > duration) {
+        currentTime = duration;
+        isPlaying = false;
+      }
+      updatePlayhead();
+      renderFrame();
+      animationId = requestAnimationFrame(playLoop);
+    }
+
+    function renderFrame() {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Draw from bottom track to top (higher track index overrides)
+      for (let t = 0; t < tracks.length; t++) {
+        for (let clip of tracks[t]) {
+          if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+            const m = media.find(x => x.id == clip.mediaId);
+            if (!m) continue;
+            const localTime = clip.trimStart + (currentTime - clip.startTime);
+            if (m.type === 'video' && m.element) {
+              m.element.currentTime = Math.min(localTime, m.duration - 0.01);
+              ctx.drawImage(m.element, 0, 0, canvas.width, canvas.height);
+            } else if (m.type === 'image' && m.element) {
+              ctx.drawImage(m.element, 0, 0, canvas.width, canvas.height);
+            }
+            break; // topmost (later tracks) override, but we draw all and later overwrite
+          }
+        }
+      }
+    }
+
+    // Export
+    document.getElementById('exportBtn').onclick = () => {
+      document.getElementById('exportModal').style.display = 'flex';
+    };
+    document.getElementById('closeModal').onclick = () => {
+      document.getElementById('exportModal').style.display = 'none';
+    };
+    document.getElementById('startExport').onclick = async () => {
+      const fps = parseInt(document.getElementById('fpsSelect').value);
+      const [w, h] = document.getElementById('resSelect').value.split('x').map(Number);
+      document.getElementById('exportStatus').textContent = 'מרנדר... זה עשוי לקחת זמן';
+      // Simple export via MediaRecorder on canvas playback
+      canvas.width = w; canvas.height = h;
+      const stream = canvas.captureStream(fps);
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+      const chunks = [];
+      recorder.ondataavailable = e => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'DaniWorldsStudio_export.webm';
+        a.click();
+        document.getElementById('exportStatus').textContent = 'הורד הושלם!';
+        canvas.width = 1280; canvas.height = 720; // reset
+      };
+      currentTime = 0;
+      isPlaying = true;
+      recorder.start();
+      const exportDuration = duration;
+      const interval = setInterval(() => {
+        if (currentTime >= exportDuration) {
+          clearInterval(interval);
+          isPlaying = false;
+          recorder.stop();
+        }
+      }, 100);
+      // force play
+      lastTimestamp = performance.now();
+      playLoop(lastTimestamp);
+    };
+
+    // Init
+    updateDuration();
+    renderTimeline();
+    renderFrame();
+  </script>
+</body>
+</html>
