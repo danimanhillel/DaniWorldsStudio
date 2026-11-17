@@ -114,6 +114,7 @@
       padding: 8px 16px;
       background: #1e1e1e;
       border-bottom: 1px solid #333;
+      align-items: center;
     }
     .tool-btn {
       padding: 6px 12px;
@@ -143,6 +144,7 @@
       border-bottom: 1px solid #333;
       font-size: 11px;
       color: #888;
+      cursor: pointer;
     }
     .track-label {
       position: absolute;
@@ -188,6 +190,25 @@
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;
+      pointer-events: none;
+    }
+    .volume-line {
+      position: absolute;
+      left: 0; right: 0; bottom: 0;
+      height: 100%;
+      pointer-events: none;
+    }
+    .volume-point {
+      position: absolute;
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      border: 1px solid #000;
+      border-radius: 50%;
+      transform: translate(-50%, 50%);
+      cursor: ns-resize;
+      z-index: 3;
+      pointer-events: auto;
     }
     .playhead {
       position: absolute;
@@ -195,9 +216,36 @@
       bottom: 0;
       width: 2px;
       background: #ff5252;
-      z-index: 20;
-      pointer-events: none;
+      z-index: 30;
+      cursor: ew-resize;
     }
+    .playhead::before {
+      content: '';
+      position: absolute;
+      top: -4px;
+      left: -6px;
+      width: 14px;
+      height: 14px;
+      background: #ff5252;
+      border-radius: 50%;
+    }
+    .context-menu {
+      position: fixed;
+      background: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 6px;
+      padding: 4px 0;
+      z-index: 200;
+      min-width: 180px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      display: none;
+    }
+    .context-menu div {
+      padding: 8px 14px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .context-menu div:hover { background: #3a3a3a; }
     .modal {
       display: none;
       position: fixed;
@@ -256,7 +304,8 @@
         <button class="tool-btn active" data-tool="select">בחירה (Select)</button>
         <button class="tool-btn" data-tool="trim">קיצור (Trim)</button>
         <button class="tool-btn" data-tool="split">חיתוך (Split)</button>
-        <span style="margin-right:auto; font-size:12px; color:#888;">בחר קליפ + Delete/Backspace למחיקה</span>
+        <button class="tool-btn" data-tool="volume">ווליום (Volume)</button>
+        <span style="margin-right:auto; font-size:12px; color:#888;">בחר + Delete | לחיצה ימנית לתפריט</span>
       </div>
       <div class="timeline" id="timeline">
         <div class="time-ruler" id="timeRuler"></div>
@@ -272,6 +321,8 @@
       </div>
     </div>
   </div>
+
+  <div class="context-menu" id="contextMenu"></div>
 
   <div class="modal" id="exportModal">
     <div class="modal-content">
@@ -325,10 +376,39 @@
     let animationId = null;
     let lastTimestamp = 0;
     let audioContext = null;
+    let gainNodes = new Map();
 
     function getTrackArray(trackKey) {
       if (trackKey.startsWith('v')) return videoTracks[parseInt(trackKey.slice(1))];
       return audioTracks[parseInt(trackKey.slice(1))];
+    }
+
+    function ensureAudioGraph(m) {
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (!gainNodes.has(m.id) && m.element) {
+        try {
+          const src = audioContext.createMediaElementSource(m.element);
+          const gain = audioContext.createGain();
+          src.connect(gain);
+          gain.connect(audioContext.destination);
+          gainNodes.set(m.id, gain);
+        } catch (e) {}
+      }
+    }
+
+    function getVolumeAt(clip, localTime) {
+      if (!clip.volumePoints || clip.volumePoints.length === 0) return 1;
+      const pts = clip.volumePoints.slice().sort((a,b) => a.t - b.t);
+      const rel = localTime / clip.duration;
+      if (rel <= pts[0].t) return pts[0].v;
+      if (rel >= pts[pts.length-1].t) return pts[pts.length-1].v;
+      for (let i = 0; i < pts.length-1; i++) {
+        if (rel >= pts[i].t && rel <= pts[i+1].t) {
+          const ratio = (rel - pts[i].t) / (pts[i+1].t - pts[i].t);
+          return pts[i].v + (pts[i+1].v - pts[i].v) * ratio;
+        }
+      }
+      return 1;
     }
 
     document.querySelectorAll('.tool-btn').forEach(btn => {
@@ -353,6 +433,10 @@
       }
     });
 
+    document.addEventListener('click', () => {
+      document.getElementById('contextMenu').style.display = 'none';
+    });
+
     document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
     document.getElementById('fileInput').onchange = async (e) => {
       for (let file of e.target.files) {
@@ -362,7 +446,7 @@
         if (file.type.startsWith('video')) type = 'video';
         else if (file.type.startsWith('audio')) type = 'audio';
 
-        let item = { id, name: file.name, type, url, duration: 5, thumb: null, element: null };
+        let item = { id, name: file.name, type, url, duration: 5, thumb: null, element: null, speed: 1 };
 
         if (type === 'video') {
           const video = document.createElement('video');
@@ -374,11 +458,12 @@
           item.duration = video.duration || 5;
           item.element = video;
           video.currentTime = Math.min(1, item.duration * 0.3);
-          await new Promise(r => { video.onseeked = r; setTimeout(r, 500); });
+          await new Promise(r => { video.onseeked = r; setTimeout(r, 400); });
           const tc = document.createElement('canvas');
           tc.width = 160; tc.height = 90;
           tc.getContext('2d').drawImage(video, 0, 0, 160, 90);
           item.thumb = tc.toDataURL();
+          ensureAudioGraph(item);
         } else if (type === 'audio') {
           const audio = document.createElement('audio');
           audio.src = url;
@@ -386,7 +471,7 @@
           await new Promise(r => { audio.onloadedmetadata = r; audio.onerror = r; });
           item.duration = audio.duration || 5;
           item.element = audio;
-          item.thumb = null;
+          ensureAudioGraph(item);
         } else {
           const img = new Image();
           img.src = url;
@@ -436,7 +521,9 @@
           duration: m.duration,
           trimStart: 0,
           trimEnd: m.duration,
-          trackKey
+          trackKey,
+          volumePoints: [{t:0, v:1}, {t:1, v:1}],
+          speed: 1
         };
         getTrackArray(trackKey).push(clip);
         updateDuration();
@@ -446,7 +533,7 @@
 
     function updateDuration() {
       let max = 10;
-      [...videoTracks, ...audioTracks].forEach(t => t.forEach(c => max = Math.max(max, c.startTime + c.duration)));
+      [...videoTracks, ...audioTracks].forEach(t => t.forEach(c => max = Math.max(max, c.startTime + c.duration / (c.speed || 1))));
       duration = max;
       document.getElementById('scrubber').max = duration;
     }
@@ -460,23 +547,83 @@
           const m = media.find(x => x.id == clip.mediaId);
           const el = document.createElement('div');
           el.className = 'clip' + (m && m.type === 'audio' ? ' audio-clip' : '') + (selectedClip && selectedClip.id === clip.id ? ' selected' : '');
+          const visualDur = clip.duration / (clip.speed || 1);
           el.style.left = (clip.startTime * pixelsPerSecond) + 'px';
-          el.style.width = Math.max(20, clip.duration * pixelsPerSecond) + 'px';
-          if (m && m.thumb) {
-            el.style.backgroundImage = `url(${m.thumb})`;
-          }
-          const durText = clip.duration.toFixed(1) + 's';
-          el.innerHTML = `<div class="clip-info">${m ? m.name.substring(0, 18) : 'clip'} · ${durText}</div>`;
+          el.style.width = Math.max(20, visualDur * pixelsPerSecond) + 'px';
+          if (m && m.thumb) el.style.backgroundImage = `url(${m.thumb})`;
+          const durText = visualDur.toFixed(1) + 's';
+          const speedText = clip.speed && clip.speed !== 1 ? ` x${clip.speed}` : '';
+          el.innerHTML = `<div class="clip-info">${m ? m.name.substring(0,16) : 'clip'} · ${durText}${speedText}</div>`;
           el.dataset.clipId = clip.id;
+
+          // Volume line & points
+          if (activeTool === 'volume' && clip.volumePoints) {
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('class', 'volume-line');
+            svg.setAttribute('viewBox', '0 0 100 100');
+            svg.setAttribute('preserveAspectRatio', 'none');
+            svg.style.position = 'absolute';
+            svg.style.left = '0'; svg.style.top = '0'; svg.style.width = '100%'; svg.style.height = '100%';
+            const pts = clip.volumePoints.slice().sort((a,b)=>a.t-b.t);
+            let d = '';
+            pts.forEach((p,i) => {
+              const x = p.t * 100;
+              const y = 100 - p.v * 100;
+              d += (i===0 ? 'M' : 'L') + x + ',' + y;
+            });
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('stroke', '#fff');
+            path.setAttribute('stroke-width', '1.5');
+            path.setAttribute('fill', 'none');
+            svg.appendChild(path);
+            el.appendChild(svg);
+
+            pts.forEach(p => {
+              const pt = document.createElement('div');
+              pt.className = 'volume-point';
+              pt.style.left = (p.t * 100) + '%';
+              pt.style.bottom = (p.v * 100) + '%';
+              pt.onmousedown = (ev) => {
+                ev.stopPropagation();
+                const onMove = (me) => {
+                  const r = el.getBoundingClientRect();
+                  p.t = Math.max(0, Math.min(1, (me.clientX - r.left) / r.width));
+                  p.v = Math.max(0, Math.min(1, 1 - (me.clientY - r.top) / r.height));
+                  renderTimeline();
+                };
+                const onUp = () => {
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                };
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+              };
+              el.appendChild(pt);
+            });
+          }
 
           el.onclick = (e) => {
             e.stopPropagation();
             selectedClip = clip;
+            if (activeTool === 'volume') {
+              const r = el.getBoundingClientRect();
+              const t = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+              const v = Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height));
+              clip.volumePoints.push({t, v});
+            }
             renderTimeline();
           };
 
+          el.oncontextmenu = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectedClip = clip;
+            showContextMenu(e.clientX, e.clientY, clip);
+          };
+
           if (activeTool === 'select') {
-            el.onmousedown = (e) => { e.stopPropagation(); startDrag(e, clip); };
+            el.onmousedown = (e) => { if (e.button === 0) { e.stopPropagation(); startDrag(e, clip); } };
           } else if (activeTool === 'trim') {
             el.onmousedown = (e) => { e.stopPropagation(); startTrim(e, clip); };
           } else if (activeTool === 'split') {
@@ -488,18 +635,51 @@
       updatePlayhead();
     }
 
+    function showContextMenu(x, y, clip) {
+      const menu = document.getElementById('contextMenu');
+      menu.innerHTML = `
+        <div data-act="fadein">Fade In (סאונד)</div>
+        <div data-act="fadeout">Fade Out (סאונד)</div>
+        <div data-act="speed-0.5">איטי 50%</div>
+        <div data-act="speed-0.75">איטי 75%</div>
+        <div data-act="speed-1">מהירות רגילה 100%</div>
+        <div data-act="speed-1.1">מהיר 110%</div>
+        <div data-act="speed-1.25">מהיר 125%</div>
+        <div data-act="speed-1.5">מהיר 150%</div>
+        <div data-act="speed-1.75">מהיר 175%</div>
+        <div data-act="speed-2">מהיר 200%</div>
+      `;
+      menu.style.left = x + 'px';
+      menu.style.top = y + 'px';
+      menu.style.display = 'block';
+
+      menu.querySelectorAll('div').forEach(item => {
+        item.onclick = (e) => {
+          e.stopPropagation();
+          const act = item.dataset.act;
+          if (act === 'fadein') {
+            clip.volumePoints = [{t:0, v:0}, {t:0.15, v:1}, {t:1, v:1}];
+          } else if (act === 'fadeout') {
+            clip.volumePoints = [{t:0, v:1}, {t:0.85, v:1}, {t:1, v:0}];
+          } else if (act.startsWith('speed-')) {
+            clip.speed = parseFloat(act.split('-')[1]);
+          }
+          menu.style.display = 'none';
+          updateDuration();
+          renderTimeline();
+        };
+      });
+    }
+
     function startDrag(e, clip) {
       if (activeTool !== 'select') return;
       e.preventDefault();
       selectedClip = clip;
       const startX = e.clientX;
       const origStart = clip.startTime;
-      const origTrack = clip.trackKey;
-
       const onMove = (ev) => {
         const dx = (ev.clientX - startX) / pixelsPerSecond;
         clip.startTime = Math.max(0, origStart + dx);
-
         const tracks = document.querySelectorAll('.track');
         for (let tr of tracks) {
           const r = tr.getBoundingClientRect();
@@ -534,10 +714,10 @@
       const startX = e.clientX;
       const orig = { start: clip.startTime, dur: clip.duration, trimS: clip.trimStart };
       const onMove = (ev) => {
-        const dx = (ev.clientX - startX) / pixelsPerSecond;
+        const dx = (ev.clientX - startX) / pixelsPerSecond * (clip.speed || 1);
         if (isLeft) {
-          const newStart = Math.max(0, orig.start + dx);
-          const delta = newStart - orig.start;
+          const newStart = Math.max(0, orig.start + dx / (clip.speed || 1));
+          const delta = (newStart - orig.start) * (clip.speed || 1);
           if (orig.dur - delta > 0.1) {
             clip.startTime = newStart;
             clip.duration = orig.dur - delta;
@@ -561,14 +741,15 @@
       if (activeTool !== 'split') return;
       const rect = e.target.closest('.clip').getBoundingClientRect();
       const clickTime = clip.startTime + (e.clientX - rect.left) / pixelsPerSecond;
-      if (clickTime <= clip.startTime + 0.1 || clickTime >= clip.startTime + clip.duration - 0.1) return;
-      const offset = clickTime - clip.startTime;
+      if (clickTime <= clip.startTime + 0.1 || clickTime >= clip.startTime + clip.duration/(clip.speed||1) - 0.1) return;
+      const offset = (clickTime - clip.startTime) * (clip.speed || 1);
       const newClip = {
         ...clip,
         id: Date.now() + Math.random(),
         startTime: clickTime,
         duration: clip.duration - offset,
-        trimStart: clip.trimStart + offset
+        trimStart: clip.trimStart + offset,
+        volumePoints: JSON.parse(JSON.stringify(clip.volumePoints || []))
       };
       clip.duration = offset;
       getTrackArray(clip.trackKey).push(newClip);
@@ -589,6 +770,29 @@
       document.getElementById('scrubber').value = currentTime;
     }
 
+    // Draggable playhead + click on ruler/timeline
+    let draggingPlayhead = false;
+    playheadEl.onmousedown = (e) => {
+      e.preventDefault();
+      draggingPlayhead = true;
+    };
+    document.getElementById('timeRuler').onclick = (e) => {
+      const r = document.getElementById('timeline').getBoundingClientRect();
+      currentTime = Math.max(0, (e.clientX - r.left) / pixelsPerSecond);
+      updatePlayhead();
+      syncMedia();
+      renderFrame();
+    };
+    document.addEventListener('mousemove', (e) => {
+      if (!draggingPlayhead) return;
+      const r = document.getElementById('timeline').getBoundingClientRect();
+      currentTime = Math.max(0, Math.min(duration, (e.clientX - r.left) / pixelsPerSecond));
+      updatePlayhead();
+      syncMedia();
+      renderFrame();
+    });
+    document.addEventListener('mouseup', () => { draggingPlayhead = false; });
+
     document.getElementById('scrubber').oninput = (e) => {
       currentTime = parseFloat(e.target.value);
       updatePlayhead();
@@ -596,13 +800,61 @@
       renderFrame();
     };
 
-    document.getElementById('playBtn').onclick = () => {
+    async function syncMedia(forcePlay = false) {
+      const activeIds = new Set();
+      const promises = [];
+
+      [...videoTracks, ...audioTracks].forEach(tr => {
+        tr.forEach(clip => {
+          const visualEnd = clip.startTime + clip.duration / (clip.speed || 1);
+          if (currentTime >= clip.startTime && currentTime < visualEnd) {
+            activeIds.add(clip.mediaId);
+            const m = media.find(x => x.id == clip.mediaId);
+            if (!m || !m.element) return;
+            const local = clip.trimStart + (currentTime - clip.startTime) * (clip.speed || 1);
+            const el = m.element;
+            el.playbackRate = clip.speed || 1;
+
+            const target = Math.max(0, Math.min(local, m.duration - 0.05));
+            if (Math.abs((el.currentTime || 0) - target) > 0.2) {
+              el.currentTime = target;
+              promises.push(new Promise(r => { el.onseeked = r; setTimeout(r, 100); }));
+            }
+
+            // Volume
+            ensureAudioGraph(m);
+            const gain = gainNodes.get(m.id);
+            if (gain) {
+              const vol = getVolumeAt(clip, local);
+              gain.gain.value = vol;
+            }
+
+            if (forcePlay || isPlaying) {
+              if (el.paused) {
+                promises.push(el.play().catch(()=>{}));
+              }
+            }
+          }
+        });
+      });
+
+      media.forEach(m => {
+        if (m.element && m.element.pause && !activeIds.has(m.id)) {
+          m.element.pause();
+        }
+      });
+
+      if (promises.length) await Promise.allSettled(promises);
+    }
+
+    document.getElementById('playBtn').onclick = async () => {
       if (isPlaying) return;
       isPlaying = true;
       lastTimestamp = performance.now();
-      syncMedia(true);
+      await syncMedia(true);
       playLoop();
     };
+
     document.getElementById('stopBtn').onclick = () => {
       isPlaying = false;
       if (animationId) cancelAnimationFrame(animationId);
@@ -615,32 +867,6 @@
     function pauseAllMedia() {
       media.forEach(m => {
         if (m.element && m.element.pause) m.element.pause();
-      });
-    }
-
-    function syncMedia(forcePlay = false) {
-      const active = new Set();
-      [...videoTracks, ...audioTracks].forEach(tr => {
-        tr.forEach(clip => {
-          if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
-            active.add(clip.mediaId);
-            const m = media.find(x => x.id == clip.mediaId);
-            if (!m || !m.element) return;
-            const local = clip.trimStart + (currentTime - clip.startTime);
-            const el = m.element;
-            if (Math.abs((el.currentTime || 0) - local) > 0.15) {
-              el.currentTime = Math.max(0, Math.min(local, m.duration - 0.05));
-            }
-            if (forcePlay || isPlaying) {
-              if (el.paused) el.play().catch(() => {});
-            }
-          }
-        });
-      });
-      media.forEach(m => {
-        if (m.element && m.element.pause && !active.has(m.id)) {
-          m.element.pause();
-        }
       });
     }
 
@@ -667,7 +893,8 @@
 
       for (let t = 0; t < 3; t++) {
         for (let clip of videoTracks[t]) {
-          if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+          const visualEnd = clip.startTime + clip.duration / (clip.speed || 1);
+          if (currentTime >= clip.startTime && currentTime < visualEnd) {
             const m = media.find(x => x.id == clip.mediaId);
             if (!m) continue;
             if (m.type === 'video' && m.element) {
@@ -713,28 +940,18 @@
       let mime = 'video/webm;codecs=vp9';
       if (format === 'webm-vp8') mime = 'video/webm;codecs=vp8';
       if (format === 'webm-av1') mime = 'video/webm;codecs=av1';
-
-      if (!MediaRecorder.isTypeSupported(mime)) {
-        mime = 'video/webm';
-      }
+      if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
 
       const stream = canvas.captureStream(fps);
 
       if (!audioContext) audioContext = new AudioContext();
       const dest = audioContext.createMediaStreamDestination();
-      const audioTracksToMix = [];
-
       media.forEach(m => {
-        if ((m.type === 'video' || m.type === 'audio') && m.element) {
-          try {
-            const src = audioContext.createMediaElementSource(m.element);
-            src.connect(dest);
-            src.connect(audioContext.destination);
-            audioTracksToMix.push(src);
-          } catch (err) {}
+        const gain = gainNodes.get(m.id);
+        if (gain) {
+          try { gain.connect(dest); } catch(e) {}
         }
       });
-
       dest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
 
       const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 });
@@ -754,8 +971,8 @@
       currentTime = 0;
       isPlaying = true;
       lastTimestamp = performance.now();
+      await syncMedia(true);
       recorder.start();
-      syncMedia(true);
       playLoop(performance.now());
 
       const check = setInterval(() => {
@@ -764,7 +981,7 @@
           setTimeout(() => {
             isPlaying = false;
             recorder.stop();
-          }, 200);
+          }, 300);
         }
       }, 100);
 
