@@ -20,21 +20,24 @@ h1{color:#4fc3f7;font-size:20px}
 .preview-panel{flex:1;background:#0a0a0a;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:12px}
 .aspect-btns{display:flex;gap:6px;margin-bottom:8px}
 .aspect-btns button{padding:4px 10px;background:#333;border:1px solid #555;border-radius:4px;color:#ccc;cursor:pointer}
-.aspect-btns button.active{background:#2196f3;color:#fff;border-color:#2196f3}
+.aspect-btns button.active{background:#2196f3;color:#fff}
 #previewCanvas{max-width:92%;max-height:68%;background:#000;border:1px solid #333}
 .controls{display:flex;gap:10px;align-items:center;margin-top:10px;width:100%;max-width:560px}
 .controls button{background:#333;color:#fff;border:none;padding:8px 14px;border-radius:4px;cursor:pointer}
 #scrubber{flex:1;accent-color:#4fc3f7;direction:ltr}
 .timeline-area{flex:1;background:#161616;display:flex;flex-direction:column}
-.toolbar{padding:8px 14px;background:#1e1e1e;border-bottom:1px solid #333;display:flex;gap:8px}
+.toolbar{padding:8px 14px;background:#1e1e1e;border-bottom:1px solid #333;display:flex;gap:8px;align-items:center}
 .tool-btn{padding:6px 12px;background:#333;color:#aaa;border:1px solid #444;border-radius:4px;cursor:pointer}
 .tool-btn.active{background:#2196f3;color:#fff}
 .timeline{flex:1;overflow:auto;position:relative;padding:8px;direction:ltr}
 .track{height:52px;background:#1a1a1a;border:1px solid #333;position:relative;margin-bottom:3px;border-radius:4px}
 .track.audio{background:#1a1f1a;border-color:#2a3a2a}
 .clip{position:absolute;height:44px;top:4px;background:#4fc3f7;border-radius:4px;background-size:cover;background-position:center;cursor:move;font-size:11px;color:#fff;display:flex;align-items:center;padding:0 6px;overflow:hidden}
-.clip.selected{outline:2px solid #ffeb3b}
+.clip.selected{outline:2px solid #ffeb3b;z-index:5}
 .playhead{position:absolute;top:0;bottom:0;width:2px;background:#ff5252;z-index:20;cursor:ew-resize}
+.context-menu{position:fixed;background:#2a2a2a;border:1px solid #444;border-radius:6px;padding:4px 0;z-index:200;min-width:180px;box-shadow:0 4px 12px rgba(0,0,0,.5);display:none}
+.context-menu div{padding:8px 14px;cursor:pointer;font-size:13px}
+.context-menu div:hover{background:#3a3a3a}
 </style>
 </head>
 <body>
@@ -68,7 +71,10 @@ h1{color:#4fc3f7;font-size:20px}
   <div class="timeline-area">
     <div class="toolbar">
       <button class="tool-btn active" data-tool="select">בחירה</button>
+      <button class="tool-btn" data-tool="trim">קיצור</button>
+      <button class="tool-btn" data-tool="split">חיתוך</button>
       <button class="tool-btn" data-tool="volume">ווליום</button>
+      <span style="margin-right:auto;font-size:12px;color:#888">לחיצה ימנית על קליפ לתפריט</span>
     </div>
     <div class="timeline" id="timeline">
       <div class="track" data-track="v0" data-type="video"></div>
@@ -81,6 +87,7 @@ h1{color:#4fc3f7;font-size:20px}
     </div>
   </div>
 </div>
+<div class="context-menu" id="contextMenu"></div>
 <script>
 let media = [];
 let videoTracks = [[], [], []];
@@ -90,6 +97,7 @@ let duration = 30;
 let isPlaying = false;
 let pixelsPerSecond = 55;
 let selectedClip = null;
+let activeTool = 'select';
 let canvas = document.getElementById('previewCanvas');
 let ctx = canvas.getContext('2d');
 let audioContext = null;
@@ -112,6 +120,14 @@ function ensureAudio(m) {
   }
 }
 
+document.querySelectorAll('.tool-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeTool = btn.dataset.tool;
+  };
+});
+
 document.querySelectorAll('.aspect-btns button').forEach(btn => {
   btn.onclick = () => {
     document.querySelectorAll('.aspect-btns button').forEach(b => b.classList.remove('active'));
@@ -122,6 +138,8 @@ document.querySelectorAll('.aspect-btns button').forEach(btn => {
     renderFrame();
   };
 });
+
+document.addEventListener('click', () => document.getElementById('contextMenu').style.display = 'none');
 
 document.getElementById('importBtn').onclick = () => document.getElementById('fileInput').click();
 document.getElementById('fileInput').onchange = async e => {
@@ -187,7 +205,7 @@ document.querySelectorAll('.track').forEach(track => {
     if (!m) return;
     const trackKey = track.dataset.track;
     const start = Math.max(0, (e.clientX - track.getBoundingClientRect().left) / pixelsPerSecond);
-    const clip = {id: Date.now()+Math.random(), mediaId: m.id, startTime: start, duration: m.duration, volume: 1};
+    const clip = {id: Date.now()+Math.random(), mediaId: m.id, startTime: start, duration: m.duration, volume: 1, speed: 1};
     getTracks(trackKey).push(clip);
     updateDuration();
     renderTimeline();
@@ -196,9 +214,47 @@ document.querySelectorAll('.track').forEach(track => {
 
 function updateDuration() {
   let max = 10;
-  [...videoTracks, ...audioTracks].forEach(t => t.forEach(c => max = Math.max(max, c.startTime + c.duration)));
+  [...videoTracks, ...audioTracks].forEach(t => t.forEach(c => max = Math.max(max, c.startTime + c.duration / (c.speed||1))));
   duration = max;
   document.getElementById('scrubber').max = duration;
+}
+
+function showContextMenu(x, y, clip) {
+  const menu = document.getElementById('contextMenu');
+  menu.innerHTML = `
+    <div data-act="split">חיתוך (Split) כאן</div>
+    <div data-act="speed-0.5">איטי 50%</div>
+    <div data-act="speed-1">מהירות 100%</div>
+    <div data-act="speed-1.5">מהיר 150%</div>
+    <div data-act="speed-2">מהיר 200%</div>
+    <div data-act="delete">מחק</div>
+  `;
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.style.display = 'block';
+  menu.querySelectorAll('div').forEach(item => {
+    item.onclick = e => {
+      e.stopPropagation();
+      const act = item.dataset.act;
+      if (act === 'delete') {
+        const arr = getTracks(clip.trackKey || 'v0');
+        const idx = arr.findIndex(c => c.id === clip.id);
+        if (idx >= 0) arr.splice(idx, 1);
+      } else if (act.startsWith('speed-')) {
+        clip.speed = parseFloat(act.split('-')[1]);
+      } else if (act === 'split') {
+        const local = currentTime - clip.startTime;
+        if (local > 0.1 && local < clip.duration - 0.1) {
+          const newClip = {...clip, id: Date.now()+Math.random(), startTime: currentTime, duration: clip.duration - local};
+          clip.duration = local;
+          getTracks(clip.trackKey || 'v0').push(newClip);
+        }
+      }
+      menu.style.display = 'none';
+      updateDuration();
+      renderTimeline();
+    };
+  });
 }
 
 function renderTimeline() {
@@ -206,16 +262,18 @@ function renderTimeline() {
     const arr = getTracks(track.dataset.track);
     track.innerHTML = '';
     arr.forEach(clip => {
+      clip.trackKey = track.dataset.track;
       const m = media.find(x => x.id == clip.mediaId);
       const el = document.createElement('div');
       el.className = 'clip' + (selectedClip && selectedClip.id === clip.id ? ' selected' : '');
       el.style.left = (clip.startTime * pixelsPerSecond) + 'px';
-      el.style.width = Math.max(24, clip.duration * pixelsPerSecond) + 'px';
+      el.style.width = Math.max(24, (clip.duration / (clip.speed||1)) * pixelsPerSecond) + 'px';
       if (m && m.thumb) el.style.backgroundImage = `url(${m.thumb})`;
-      el.textContent = m ? m.name.substring(0, 14) : '';
+      el.textContent = (m ? m.name.substring(0, 12) : '') + (clip.speed && clip.speed !== 1 ? ` x${clip.speed}` : '');
       el.onclick = e => { e.stopPropagation(); selectedClip = clip; renderTimeline(); };
+      el.oncontextmenu = e => { e.preventDefault(); e.stopPropagation(); selectedClip = clip; showContextMenu(e.clientX, e.clientY, clip); };
       el.onmousedown = e => {
-        if (e.button !== 0) return;
+        if (e.button !== 0 || activeTool !== 'select') return;
         e.stopPropagation();
         const startX = e.clientX;
         const orig = clip.startTime;
@@ -248,13 +306,15 @@ async function syncMedia(forcePlay = false) {
   const toPlay = [];
   [...videoTracks, ...audioTracks].forEach(tr => {
     tr.forEach(clip => {
-      if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+      const visualDur = clip.duration / (clip.speed || 1);
+      if (currentTime >= clip.startTime && currentTime < clip.startTime + visualDur) {
         active.add(clip.mediaId);
         const m = media.find(x => x.id == clip.mediaId);
         if (!m || !m.element) return;
-        const local = currentTime - clip.startTime;
+        const local = (currentTime - clip.startTime) * (clip.speed || 1);
         const el = m.element;
-        if (Math.abs((el.currentTime || 0) - local) > 0.18) el.currentTime = local;
+        el.playbackRate = clip.speed || 1;
+        if (Math.abs((el.currentTime || 0) - local) > 0.2) el.currentTime = local;
         ensureAudio(m);
         const gain = gainNodes.get(m.id);
         if (gain) gain.gain.value = clip.volume || 1;
@@ -306,7 +366,8 @@ function renderFrame() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   for (let t = 0; t < 3; t++) {
     for (const clip of videoTracks[t]) {
-      if (currentTime >= clip.startTime && currentTime < clip.startTime + clip.duration) {
+      const visualDur = clip.duration / (clip.speed || 1);
+      if (currentTime >= clip.startTime && currentTime < clip.startTime + visualDur) {
         const m = media.find(x => x.id == clip.mediaId);
         if (m && m.element) ctx.drawImage(m.element, 0, 0, canvas.width, canvas.height);
       }
